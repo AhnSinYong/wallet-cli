@@ -14,34 +14,30 @@
  */
 package org.tron.explorer.controller;
 
+import com.maxmind.geoip2.DatabaseReader;
 import com.maxmind.geoip2.exception.GeoIp2Exception;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.net.UnknownHostException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import com.maxmind.geoip2.model.CityResponse;
+import com.maxmind.geoip2.record.City;
+import com.maxmind.geoip2.record.Country;
+import com.maxmind.geoip2.record.Location;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.tron.api.GrpcAPI.Node;
 import org.tron.api.GrpcAPI.NodeList;
 import org.tron.common.utils.ByteArray;
 import org.tron.walletserver.WalletClient;
-import com.maxmind.geoip2.DatabaseReader;
-import com.maxmind.geoip2.model.CityResponse;
-import com.maxmind.geoip2.record.*;
-import java.io.File;
+
+import java.io.*;
 import java.net.InetAddress;
+import java.util.*;
 
 @RestController
 public class NodeController {
 
+  private static final Log log = LogFactory.getLog(NodeController.class);
   static final String splitString0 = "|||";
   static final String splitString1 = "\\|\\|\\|";
   private static Map<String, String> ipCity = loadCityMap();
@@ -49,15 +45,15 @@ public class NodeController {
   public static void addNewIp(String ip, Map ipCity) {
     String dbPath = WalletClient.getDbPath();
     String txtPath = WalletClient.getTxtPath();
-    File database = null;
+    InputStream input = null;
     DatabaseReader reader = null;
-    File txtFile = null;
     FileWriter fw = null;
     BufferedWriter bw = null;
 
     try {
-      database = new File(dbPath);
-      reader = new DatabaseReader.Builder(database).build();
+      ClassPathResource classPathResource = new ClassPathResource(dbPath);
+      input = classPathResource.getInputStream();
+      reader = new DatabaseReader.Builder(input).build();
       InetAddress ipAddress = InetAddress.getByName(ip);
       if (ipAddress == null) {
         return;
@@ -96,7 +92,7 @@ public class NodeController {
       jsonData += "\"longitude\":" + longitude + ",";
       jsonData += "\"latitude\":" + latitude;
 
-      txtFile = new File(txtPath);
+      File txtFile = new File(txtPath);
       if (!txtFile.exists()) {
         txtFile.createNewFile();
       }
@@ -109,13 +105,16 @@ public class NodeController {
       ipCity.put(ip, jsonData);
 
     } catch (IOException ioEx) {
-      ioEx.printStackTrace();
+      log.error(ioEx.getMessage());
     } catch (GeoIp2Exception geoIp2Ex) {
-      geoIp2Ex.printStackTrace();
+      log.error(geoIp2Ex.getMessage());
     } finally {
       try {
         if (reader != null) {
           reader.close();
+        }
+        if (input != null) {
+          input.close();
         }
         if (bw != null) {
           bw.close();
@@ -124,7 +123,7 @@ public class NodeController {
           fw.close();
         }
       } catch (IOException e) {
-        e.printStackTrace();
+        log.error(e.getMessage());
       }
     }
   }
@@ -132,14 +131,10 @@ public class NodeController {
   private static Map<String, String> loadCityMap() {
     Map<String, String> ipCity = new HashMap<String, String>();
     String txtPath = WalletClient.getTxtPath();
-    File txtFile = null;
     FileReader fr = null;
     BufferedReader br = null;
     try {
-      txtFile = new File(txtPath);
-      if (!txtFile.exists()) {
-        return ipCity;
-      }
+      File txtFile = new File(txtPath);
       fr = new FileReader(txtFile);
       br = new BufferedReader(fr);
       String line = br.readLine();
@@ -155,7 +150,7 @@ public class NodeController {
         line = br.readLine();
       }
     } catch (IOException io) {
-      io.printStackTrace();
+      log.error(io.getMessage());
     } finally {
       try {
         if (br != null) {
@@ -165,7 +160,7 @@ public class NodeController {
           fr.close();
         }
       } catch (IOException e) {
-        e.printStackTrace();
+        log.error(e.getMessage());
       }
     }
     return ipCity;
@@ -228,7 +223,7 @@ public class NodeController {
         return NodeList2Json(nodeList);
       }
     } catch (Exception e) {
-      e.printStackTrace();
+      log.error(e.getMessage());
     }
     return "";
   }
